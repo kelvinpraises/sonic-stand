@@ -245,7 +245,7 @@ const IndexNewVideo = () => {
       </div>
       <DrawerContent>
         <DrawerHeader className="text-left">
-          <DrawerTitle className="text-2xl font-bold text-center mb-6">
+          <DrawerTitle className="text-xl font-bold text-center mb-6">
             Index New Video
           </DrawerTitle>
         </DrawerHeader>
