@@ -6,6 +6,8 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useAccount } from "wagmi";
 import * as z from "zod";
+import { pinata } from "@/services/pinata";
+import { useModal } from "connectkit";
 
 import { Button } from "@/components/atoms/button";
 import {
@@ -42,7 +44,15 @@ const formSchema = z.object({
     .max(280, "Description must be less than 280 characters"),
   videoFile: z
     .any()
-    .refine((files) => files?.length === 1, "Video file is required"),
+    .refine((files) => files?.length === 1, "Only a single video file is allowed")
+    .refine(
+      (files) => {
+        if (!files || files.length === 0) return false;
+        const file = files[0];
+        return file && file.type.startsWith("video/");
+      },
+      "Only video files are allowed"
+    ),
 });
 
 const IndexNewVideo = () => {
@@ -51,7 +61,8 @@ const IndexNewVideo = () => {
   const [files, setFiles] = useState<File[]>([]);
 
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
+  const { setOpen: setWalletModalOpen } = useModal();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -63,13 +74,36 @@ const IndexNewVideo = () => {
   });
 
   const handleFileUpload = (files: File[]) => {
-    setFiles(files);
-    form.setValue("videoFile", files);
+    // Only keep the most recent file
+    const filteredFiles = files.filter(file => file.type.startsWith('video/'));
+    
+    if (filteredFiles.length === 0) {
+      toast.error("Only video files are allowed");
+      return;
+    }
+    
+    // Only take the most recent file
+    const latestFile = [filteredFiles[filteredFiles.length - 1]];
+    
+    setFiles(latestFile);
+    form.setValue("videoFile", latestFile);
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!address) {
-      toast.error("Please connect wallet");
+      setWalletModalOpen(true);
+      toast.error("Please connect wallet first");
+      return;
+    }
+
+    if (!files || files.length === 0) {
+      toast.error("Please upload a video file");
+      return;
+    }
+
+    const file = files[0];
+    if (!file.type.startsWith('video/')) {
+      toast.error("Only video files are allowed");
       return;
     }
 
@@ -80,6 +114,8 @@ const IndexNewVideo = () => {
       // 1. Upload the video file to IPFS/Pinata
       // 2. Create metadata with title, description, and video URL
       // 3. Index the video with crystalrohr
+      // const upload = await pinata.upload.file(files[0]);
+
       console.log("Submitting:", values);
       console.log("Files:", files);
 
@@ -98,6 +134,26 @@ const IndexNewVideo = () => {
       setIsSubmitting(false);
     }
   };
+
+  const renderConnectWalletButton = () => (
+    <Button
+      type="button"
+      onClick={() => setWalletModalOpen(true)}
+      className="w-full bg-[#33CB82] text-white hover:bg-[#33CB82]/80 rounded-lg py-3"
+    >
+      Connect Wallet to Index Videos
+    </Button>
+  );
+
+  const renderIndexButton = () => (
+    <Button
+      type="submit"
+      className="w-full bg-zinc-800 text-white hover:bg-zinc-700 rounded-lg py-3"
+      disabled={isSubmitting}
+    >
+      {isSubmitting ? "Indexing Video..." : "Index Video"}
+    </Button>
+  );
 
   const content = (
     <Form {...form}>
@@ -149,18 +205,15 @@ const IndexNewVideo = () => {
                   <FileUpload onChange={handleFileUpload} />
                 </div>
               </FormControl>
+              <div className="text-xs text-neutral-500 mt-1">
+                Only video files (.mp4, .mov, .avi, etc.) are allowed. Maximum one file.
+              </div>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <Button
-          type="submit"
-          className="w-full bg-zinc-800 text-white hover:bg-zinc-700 rounded-lg py-3"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Indexing Video..." : "Index Video"}
-        </Button>
+        {isConnected ? renderIndexButton() : renderConnectWalletButton()}
       </form>
     </Form>
   );

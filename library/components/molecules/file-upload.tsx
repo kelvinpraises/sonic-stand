@@ -37,8 +37,19 @@ export const FileUpload = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (newFiles: File[]) => {
-    setFiles((prevFiles) => [...prevFiles, ...newFiles]);
-    onChange && onChange(newFiles);
+    // Filter to only accept video files
+    const videoFiles = newFiles.filter(file => file.type.startsWith('video/'));
+    
+    if (videoFiles.length === 0 && newFiles.length > 0) {
+      console.error("Only video files are allowed");
+      return;
+    }
+    
+    // Only take the most recent file - enforce single file upload
+    const latestFile = videoFiles.length > 0 ? [videoFiles[videoFiles.length - 1]] : [];
+    
+    setFiles(latestFile);
+    onChange && onChange(latestFile);
   };
 
   const handleClick = () => {
@@ -52,6 +63,9 @@ export const FileUpload = ({
     onDropRejected: (error) => {
       console.log(error);
     },
+    accept: {
+      'video/*': ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv']
+    }
   });
 
   return (
@@ -65,6 +79,7 @@ export const FileUpload = ({
           ref={fileInputRef}
           id="file-upload-handle"
           type="file"
+          accept="video/*"
           onChange={(e) => handleFileChange(Array.from(e.target.files || []))}
           className="hidden"
         />
