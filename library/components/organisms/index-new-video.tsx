@@ -1,13 +1,12 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useModal } from "connectkit";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useAccount } from "wagmi";
 import * as z from "zod";
-import { pinata } from "@/services/pinata";
-import { useModal } from "connectkit";
 
 import { Button } from "@/components/atoms/button";
 import {
@@ -35,6 +34,8 @@ import {
 import { Input } from "@/components/atoms/input";
 import { FileUpload } from "@/components/molecules/file-upload";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { pinata } from "@/services/pinata";
+import { useVISENetwork } from "@/hooks/use-vise-network";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -44,15 +45,15 @@ const formSchema = z.object({
     .max(280, "Description must be less than 280 characters"),
   videoFile: z
     .any()
-    .refine((files) => files?.length === 1, "Only a single video file is allowed")
     .refine(
-      (files) => {
-        if (!files || files.length === 0) return false;
-        const file = files[0];
-        return file && file.type.startsWith("video/");
-      },
-      "Only video files are allowed"
-    ),
+      (files) => files?.length === 1,
+      "Only a single video file is allowed"
+    )
+    .refine((files) => {
+      if (!files || files.length === 0) return false;
+      const file = files[0];
+      return file && file.type.startsWith("video/");
+    }, "Only video files are allowed"),
 });
 
 const IndexNewVideo = () => {
@@ -63,6 +64,8 @@ const IndexNewVideo = () => {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { address, isConnected } = useAccount();
   const { setOpen: setWalletModalOpen } = useModal();
+
+  const { indexVideo } = useVISENetwork();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -75,18 +78,49 @@ const IndexNewVideo = () => {
 
   const handleFileUpload = (files: File[]) => {
     // Only keep the most recent file
-    const filteredFiles = files.filter(file => file.type.startsWith('video/'));
-    
+    const filteredFiles = files.filter((file) =>
+      file.type.startsWith("video/")
+    );
+
     if (filteredFiles.length === 0) {
       toast.error("Only video files are allowed");
       return;
     }
-    
+
     // Only take the most recent file
     const latestFile = [filteredFiles[filteredFiles.length - 1]];
-    
+
     setFiles(latestFile);
     form.setValue("videoFile", latestFile);
+  };
+
+  const getVideoDuration = (file: File): Promise<number | null> => {
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+
+        // Handle successful metadata load
+        video.onloadedmetadata = () => {
+          window.URL.revokeObjectURL(video.src);
+          resolve(Math.round(video.duration));
+        };
+
+        // Handle errors in loading the video
+        video.onerror = () => {
+          console.warn(
+            "Could not determine video duration, using default value"
+          );
+          window.URL.revokeObjectURL(video.src);
+          resolve(null);
+        };
+
+        video.src = URL.createObjectURL(file);
+      } catch (error) {
+        console.warn("Error in getVideoDuration:", error);
+        resolve(null);
+      }
+    });
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -102,7 +136,7 @@ const IndexNewVideo = () => {
     }
 
     const file = files[0];
-    if (!file.type.startsWith('video/')) {
+    if (!file.type.startsWith("video/")) {
       toast.error("Only video files are allowed");
       return;
     }
@@ -110,16 +144,25 @@ const IndexNewVideo = () => {
     setIsSubmitting(true);
 
     try {
-      // Here we would:
-      // 1. Upload the video file to IPFS/Pinata
-      // 2. Create metadata with title, description, and video URL
-      // 3. Index the video with crystalrohr
-      // const upload = await pinata.upload.file(files[0]);
+      // Get video duration in seconds, fallback to default if it fails
+      const defaultDuration = 3600; // 1 hour
+      const videoLengthSeconds =
+        (await getVideoDuration(file)) || defaultDuration;
 
-      console.log("Submitting:", values);
-      console.log("Files:", files);
+      // Upload the video file to Pinata with metadata
+      const upload = await pinata.upload.public.file(files[0]).keyvalues({
+        title: values.title,
+        description: values.description,
+        uploadedBy: address || "",
+      });
 
-      toast.success("Video indexed successfully!");
+      // Get the IPFS hash for the uploaded content
+      const ipfsCid = upload.cid;
+      console.log("File uploaded to IPFS with hash:", ipfsCid);
+
+      indexVideo(ipfsCid, videoLengthSeconds);
+
+      toast.success("Video submitted for indexing!");
       setOpen(false);
       form.reset();
       setFiles([]);
@@ -206,7 +249,8 @@ const IndexNewVideo = () => {
                 </div>
               </FormControl>
               <div className="text-xs text-neutral-500 mt-1">
-                Only video files (.mp4, .mov, .avi, etc.) are allowed. Maximum one file.
+                Only video files (.mp4, .mov, .avi, etc.) are allowed. Maximum
+                one file.
               </div>
               <FormMessage />
             </FormItem>
