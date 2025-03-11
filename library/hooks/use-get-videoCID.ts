@@ -7,7 +7,7 @@ interface SignedUrlResponse {
   contentType: string | null;
 }
 
-export const useGetIpfsHash = () => {
+export const useGetVideoCID = () => {
   const [blobURL, setBlobURL] = useState<string>("");
 
   useEffect(() => {
@@ -18,10 +18,12 @@ export const useGetIpfsHash = () => {
     };
   }, [blobURL]);
 
-  const getIpfsHashData = useCallback(
-    async (ipfsHash: string): Promise<SignedUrlResponse | undefined> => {
+  const getVideoCIDData = useCallback(
+    async (videoCID: string): Promise<SignedUrlResponse | undefined> => {
       try {
-        const { data, contentType } = await pinata.gateways.get(ipfsHash);
+        const { data, contentType } = await pinata.gateways.public.get(
+          videoCID
+        );
 
         if (data instanceof Blob) {
           const url = URL.createObjectURL(data);
@@ -45,5 +47,5 @@ export const useGetIpfsHash = () => {
     []
   );
 
-  return { getIpfsHashData };
+  return { getVideoCIDData };
 };
