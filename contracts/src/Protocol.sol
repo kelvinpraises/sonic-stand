@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {VISEToken} from "./Token.sol";
+import {VIToken} from "./Token.sol";
 
 contract VISENetwork is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -40,7 +40,7 @@ contract VISENetwork is ReentrancyGuard {
     uint256 public constant BUFFER_TIME = 5 minutes; // Additional buffer time for all tasks
 
     // State variables
-    VISEToken public viToken;
+    VIToken public viToken;
     EnumerableSet.AddressSet private activeNodes;
     mapping(address => Node) public nodes;
     mapping(bytes32 => Video) private videos;
@@ -87,7 +87,7 @@ contract VISENetwork is ReentrancyGuard {
     // ============ Constructor & Internal Helpers ============
 
     constructor(address _viToken) {
-        viToken = VISEToken(_viToken);
+        viToken = VIToken(_viToken);
     }
 
     /**
