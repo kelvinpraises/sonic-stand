@@ -1,4 +1,4 @@
-import { PinataSDK } from "pinata-web3";
+import { PinataSDK } from "pinata";
 
 export const createPinataSDK = (customJwt?: string) => {
   return new PinataSDK({

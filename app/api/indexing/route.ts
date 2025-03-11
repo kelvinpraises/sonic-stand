@@ -49,13 +49,13 @@ export async function POST(req: NextRequest) {
 
     const imageContents: ImageBlockParam[] = (
       await Promise.all(
-        capturedImages.map(async (ipfsHash) => {
-          if (typeof ipfsHash !== "string") {
-            console.log(`Skipping non-string image: ${ipfsHash}`);
+        capturedImages.map(async (videoCID) => {
+          if (typeof videoCID !== "string") {
+            console.log(`Skipping non-string image: ${videoCID}`);
             return null;
           }
 
-          const file = await pinata.gateways.get(ipfsHash);
+          const file = await pinata.gateways.public.get(videoCID);
 
           if (
             !file.data ||
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
             )
           ) {
             console.log(
-              `Skipping unsupported content type for image: ${ipfsHash}`
+              `Skipping unsupported content type for image: ${videoCID}`
             );
             return null;
           }
@@ -78,10 +78,10 @@ export async function POST(req: NextRequest) {
           } else if (typeof file.data === "string") {
             base64Data = Buffer.from(file.data).toString("base64");
           } else if (file.data instanceof Object) {
-            console.log(`Unexpected Object data type for image: ${ipfsHash}`);
+            console.log(`Unexpected Object data type for image: ${videoCID}`);
             return null;
           } else {
-            console.log(`Unsupported data type for image: ${ipfsHash}`);
+            console.log(`Unsupported data type for image: ${videoCID}`);
             return null;
           }
 
@@ -231,8 +231,8 @@ export async function POST(req: NextRequest) {
     if (message.content[0].type === "text") {
       //   const indexData = JSON.parse(message.tool_calls[0].input);
       const indexData = JSON.parse(message.content[0].text);
-      const upload = await pinata.upload.json(indexData);
-      return NextResponse.json({ indexCID: upload.IpfsHash }, { status: 200 });
+      const upload = await pinata.upload.public.json(indexData);
+      return NextResponse.json({ indexCID: upload.cid }, { status: 200 });
     } else {
       return NextResponse.json(
         { error: "No valid index data generated" },

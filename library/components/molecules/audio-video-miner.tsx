@@ -2,22 +2,22 @@ import { JSX, useEffect, useState } from "react";
 
 import Canvas from "@/components/molecules/canvas";
 import useCaptureStills from "@/hooks/use-capture-stills";
-import { useGetIpfsHash } from "@/hooks/use-get-ipfsHash";
+import { useGetVideoCID } from "@/hooks/use-get-videoCID";
 
 interface AudioVideoMinerProps {
-  ipfsHash: string;
+  videoCID: string;
   onComplete: (capturedImages: string[], extractedAudio: Blob) => void;
 }
 
 const AudioVideoMiner = ({
-  ipfsHash,
+  videoCID,
   onComplete,
 }: AudioVideoMinerProps): JSX.Element => {
   const [isVideoVisible, setIsVideoVisible] = useState(true);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
 
-  const { getIpfsHashData } = useGetIpfsHash();
+  const { getVideoCIDData } = useGetVideoCID();
   const {
     canvasRef,
     captureSliced,
@@ -41,10 +41,10 @@ const AudioVideoMiner = ({
 
   useEffect(() => {
     const fetchData = async () => {
-      if (ipfsHash) {
+      if (videoCID) {
         startPolling();
         try {
-          const response = await getIpfsHashData(ipfsHash);
+          const response = await getVideoCIDData(videoCID);
           if (response?.url) {
             setVideoUrl(response.url);
             if (response.data instanceof Blob) {
@@ -57,7 +57,7 @@ const AudioVideoMiner = ({
             console.error("Video URL didn't load");
           }
         } catch (error) {
-          console.error("Error fetching IpfsHash data:", error);
+          console.error("Error fetching videoCID data:", error);
         }
       }
     };
@@ -67,7 +67,7 @@ const AudioVideoMiner = ({
     return () => {
       stopPolling();
     };
-  }, [ipfsHash, startPolling, stopPolling, getIpfsHashData]);
+  }, [videoCID, startPolling, stopPolling, getVideoCIDData]);
 
   return (
     <div>

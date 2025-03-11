@@ -4,7 +4,7 @@ import { pinata } from "@/services/pinata";
 
 const useFileUpload = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [ipfsHash, setIpfsHash] = useState<string>("");
+  const [videoCid, setVideoCid] = useState<string>("");
   const [uploading, setUploading] = useState<boolean>(false);
 
   const uploadFile = useCallback(
@@ -20,11 +20,11 @@ const useFileUpload = () => {
 
       try {
         setUploading(true);
-        const { IpfsHash } = await pinata.upload
+        const { cid } = await pinata.upload.public
           .file(_file)
           .key((await fetch("/api/key").then((res) => res.json())).JWT);
-        setIpfsHash(IpfsHash);
-        return IpfsHash;
+        setVideoCid(cid);
+        return cid;
       } catch (e) {
         console.error("Error uploading file:", e);
         throw new Error("Trouble uploading file");
@@ -42,8 +42,8 @@ const useFileUpload = () => {
   return {
     file,
     setFile,
-    ipfsHash,
-    setIpfsHash,
+    videoCid,
+    setVideoCid,
     uploading,
     uploadFile,
     handleChange,

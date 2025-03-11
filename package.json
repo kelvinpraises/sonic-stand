@@ -44,7 +44,7 @@
     "mini-svg-data-uri": "^1.4.4",
     "next": "15.1.0",
     "next-themes": "^0.4.3",
-    "pinata-web3": "^0.5.4",
+    "pinata": "^2.0.1",
     "postgres": "^3.4.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

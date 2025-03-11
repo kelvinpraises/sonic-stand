@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     if (!Array.isArray(capturedImages) || capturedImages.length === 0) {
       return NextResponse.json(
-        { error: "Invalid or empty IpfsHash array" },
+        { error: "Invalid or empty VideoCID array" },
         { status: 400 }
       );
     }
@@ -50,13 +50,13 @@ export async function POST(req: NextRequest) {
 
     const imageContents: ImageBlockParam[] = (
       await Promise.all(
-        capturedImages.map(async (ipfsHash) => {
-          if (typeof ipfsHash !== "string") {
-            console.log(`Skipping non-string IpfsHash: ${ipfsHash}`);
+        capturedImages.map(async (videoCID) => {
+          if (typeof videoCID !== "string") {
+            console.log(`Skipping non-string VideoCID: ${videoCID}`);
             return null;
           }
 
-          const file = await pinata.gateways.get(ipfsHash);
+          const file = await pinata.gateways.public.get(videoCID);
 
           if (
             !file.data ||
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
             )
           ) {
             console.log(
-              `Skipping unsupported content type for IpfsHash: ${ipfsHash}`
+              `Skipping unsupported content type for VideoCID: ${videoCID}`
             );
             return null;
           }
@@ -80,11 +80,11 @@ export async function POST(req: NextRequest) {
             base64Data = Buffer.from(file.data).toString("base64");
           } else if (file.data instanceof Object) {
             console.log(
-              `Unexpected Object data type for image IpfsHash: ${ipfsHash}`
+              `Unexpected Object data type for image VideoCID: ${videoCID}`
             );
             return null;
           } else {
-            console.log(`Unsupported data type for IpfsHash: ${ipfsHash}`);
+            console.log(`Unsupported data type for VideoCID: ${videoCID}`);
             return null;
           }
 
@@ -172,9 +172,11 @@ export async function POST(req: NextRequest) {
       ],
     });
 
+    console.log(message);
+
     if (message.content[0].type === "text") {
-      const upload = await pinata.upload.json(message);
-      return NextResponse.json({ ipfsHash: upload.IpfsHash }, { status: 200 });
+      const upload = await pinata.upload.public.json(message);
+      return NextResponse.json({ videoCID: upload.cid }, { status: 200 });
     } else {
       return NextResponse.json(
         { error: "Unexpected response format" },

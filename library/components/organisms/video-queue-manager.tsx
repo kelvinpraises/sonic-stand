@@ -104,7 +104,7 @@ const VideoQueueManager = () => {
     <div>
       {currentVideoTask?.videoCID && (
         <AudioVideoMiner
-          ipfsHash={currentVideoTask.videoCID}
+          videoCID={currentVideoTask.videoCID}
           onComplete={handleMiningComplete}
         />
       )}
