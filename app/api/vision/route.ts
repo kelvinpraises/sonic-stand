@@ -15,7 +15,6 @@ type SupportedImageType = (typeof SUPPORTED_IMAGE_TYPES)[number];
 
 export const dynamic = "force-dynamic";
 
-// TODO: if audio errors move on...
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -42,11 +41,18 @@ export async function POST(req: NextRequest) {
 
     const anthropic = new Anthropic();
 
-    const result = await livepeer.generate.audioToText({
-      audio: extractedAudio,
-      modelId: "openai/whisper-large-v3",
-    });
-    const audioTranscription = result.textResponse?.text;
+    // Handle audio transcription with error fallback
+    let audioTranscription = "";
+    try {
+      const result = await livepeer.generate.audioToText({
+        audio: extractedAudio,
+        modelId: "openai/whisper-large-v3",
+      });
+      audioTranscription = result.textResponse?.text || "";
+    } catch (audioError) {
+      console.error("Audio transcription failed:", audioError);
+      // Continue with empty transcription rather than failing the whole process
+    }
 
     const imageContents: ImageBlockParam[] = (
       await Promise.all(
@@ -174,8 +180,14 @@ export async function POST(req: NextRequest) {
 
     console.log(message);
 
-    if (message.content[0].type === "text") {
-      const upload = await pinata.upload.public.json(message);
+    const toolUseContent = message.content.find(
+      (item) => item.type === "tool_use"
+    );
+
+    if (toolUseContent && "input" in toolUseContent) {
+      const upload = await pinata.upload.public.json(
+        toolUseContent.input as object
+      );
       return NextResponse.json({ videoCID: upload.cid }, { status: 200 });
     } else {
       return NextResponse.json(
