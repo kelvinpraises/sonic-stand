@@ -127,7 +127,7 @@ const ConsolePage = () => {
                 Decentralize each story. Unleash it's insights.
               </p>
               <p className="text-sm md:text-base font-medium leading-[17px] text-[#484E62] text-center">
-                Join the network, earn VISE tokens, and{" "}
+                Join the network, earn VI tokens, and{" "}
                 <Link
                   href={"/explore"}
                   target="_blank"
@@ -197,7 +197,7 @@ const ConsolePage = () => {
                     <Card className="flex flex-row justify-between p-4 bg-card text-card-foreground min-w-full md:min-w-80">
                       <div className="flex flex-col gap-3 md:gap-6">
                         <p className="font-outfit font-semibold text-sm md:text-base text-[#484E62] dark:text-[#B7BDD5]">
-                          Total ROHR Earned
+                          Total VI Earned
                         </p>
                         <p className="text-3xl md:text-4xl font-outfit font-bold">
                           {/* {earnedAmount} */} 0
