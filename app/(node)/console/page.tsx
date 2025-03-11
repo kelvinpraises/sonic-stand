@@ -6,6 +6,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GlobeMethods } from "react-globe.gl";
+import { toast } from "sonner";
+import { useAccount } from "wagmi";
 
 import { Card } from "@/components/atoms/card";
 import StandbyButton from "@/components/molecules/standby-button";
@@ -17,7 +19,7 @@ const Globe = dynamic(() => import("@/components/organisms/wrapped-globe"), {
 });
 
 const GLOBE_POINTS = 250;
-const CRYSTAL_TYPES = ["DePIN", "Video", "Caption", "Network"] as const;
+const CRYSTAL_TYPES = ["DePIN", "Video", "Indexes", "Network"] as const;
 const POINT_COLORS = ["red", "white", "blue", "green"] as const;
 
 const ConsolePage = () => {
@@ -26,9 +28,10 @@ const ConsolePage = () => {
   );
   const globeRef = useRef<GlobeMethods>(null);
   const [loaded, setLoaded] = useState(false);
-  const [showGlobe, setShowGlobe] = useState(false);
+  const [showComponent, setShowComponent] = useState(false);
 
-  const { completedCaptions, scenesProcessed } = useStore();
+  const { completedIndexes, scenesProcessed } = useStore();
+  const { isConnected } = useAccount();
 
   const { theme, systemTheme } = useTheme();
   const currentTheme = theme === "system" ? systemTheme : theme;
@@ -59,10 +62,15 @@ const ConsolePage = () => {
   }, [loaded]);
 
   const handleStandbyClick = () => {
+    if (!isConnected) {
+      toast.error("Please connect your wallet to continue");
+      return;
+    }
+
     setCurrentView("dashboard");
     // Show globe after animation completes
     setTimeout(() => {
-      setShowGlobe(true);
+      setShowComponent(true);
     }, 1000);
   };
 
@@ -119,16 +127,16 @@ const ConsolePage = () => {
                 Decentralize each story. Unleash it's insights.
               </p>
               <p className="text-sm md:text-base font-medium leading-[17px] text-[#484E62] text-center">
-                Secure the network, you&apos;ll need to stake some coins. Click{" "}
+                Join the network, earn VISE tokens, and{" "}
                 <Link
-                  href={"/token-management"}
+                  href={"/explore"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#138FA8]"
                 >
-                  here
+                  explore
                 </Link>{" "}
-                to access a faucet.
+                indexed videos or add your own.
               </p>
             </div>
 
@@ -167,10 +175,10 @@ const ConsolePage = () => {
                     <Card className="flex flex-row justify-between p-4 bg-card text-card-foreground min-w-full md:min-w-80">
                       <div className="flex flex-col gap-3 md:gap-6">
                         <p className="font-outfit font-semibold text-sm md:text-base text-[#484E62] dark:text-[#B7BDD5]">
-                          Completed Captions
+                          Completed Indexes
                         </p>
                         <p className="text-3xl md:text-4xl font-outfit font-bold">
-                          {completedCaptions}
+                          {completedIndexes}
                         </p>
                       </div>
                     </Card>
@@ -214,14 +222,14 @@ const ConsolePage = () => {
                 </div>
                 <div className="flex flex-col p-2 md:p-4 gap-2 md:gap-4">
                   <h1 className="font-outfit font-semibold text-lg md:text-xl">
-                    Video Caption Queue
+                    Video Queue
                   </h1>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
-                    <VideoQueueManager />
+                    {showComponent && <VideoQueueManager />}
                   </div>
                 </div>
                 <AnimatePresence>
-                  {showGlobe && (
+                  {showComponent && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
