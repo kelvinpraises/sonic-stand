@@ -1,9 +1,9 @@
 # SonicStand
 
 <div align="center">
-  [Banner Image Placeholder - showing decentralized video curation network and insight visualization]
+  <img src="https://sonicstand.vercel.app/logo-dark.png" alt="SonicStand Logo" width="300">
 
-📖 [Documentation](#) | 🎯 [Demo](#) | 🔗 [Network Dashboard](#)
+📖 [Documentation](#) | 🎯 [Demo](https://sonicstand.vercel.app/) | 🔗 [Network Dashboard](https://sonicstand.vercel.app/console)
 
 </div>
 
