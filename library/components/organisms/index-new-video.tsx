@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/atoms/input";
 import { FileUpload } from "@/components/molecules/file-upload";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useIndexedVideos } from "@/hooks/use-indexed-videos";
 import { pinata } from "@/services/pinata";
 import { useVISENetwork } from "@/hooks/use-vise-network";
 
@@ -66,6 +67,7 @@ const IndexNewVideo = () => {
   const { setOpen: setWalletModalOpen } = useModal();
 
   const { indexVideo } = useVISENetwork();
+  const { addVideo, updateVideoStatus, syncAllVideos } = useIndexedVideos();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -150,26 +152,84 @@ const IndexNewVideo = () => {
         (await getVideoDuration(file)) || defaultDuration;
 
       // Upload the video file to Pinata with metadata
-      const upload = await pinata.upload.public.file(files[0]).keyvalues({
-        title: values.title,
-        description: values.description,
-        uploadedBy: address || "",
-      });
+      const upload = await pinata.upload.public
+        .file(files[0])
+        .key((await fetch("/api/key").then((res) => res.json())).JWT)
+        .keyvalues({
+          title: values.title,
+          description: values.description,
+          uploadedBy: address || "",
+        });
 
       // Get the IPFS hash for the uploaded content
       const ipfsCid = upload.cid;
       console.log("File uploaded to IPFS with hash:", ipfsCid);
 
-      indexVideo(ipfsCid, videoLengthSeconds);
+      // First, always save the video to the store regardless of indexing success
+      addVideo(ipfsCid, {
+        fileName: file.name,
+        fileSize: file.size,
+        status: "pending",
+        requestTimestamp: Math.floor(Date.now() / 1000),
+        title: values.title,
+        description: values.description,
+      });
 
-      toast.success("Video submitted for indexing!");
+      // Always attempt to index the video
+      try {
+        await indexVideo(ipfsCid, videoLengthSeconds);
+        toast.success("Video submitted for indexing!");
+        
+        // Update the video status after a short delay to get the latest status
+        setTimeout(() => updateVideoStatus(ipfsCid), 2000);
+      } catch (indexError) {
+        console.error("Error during indexing:", indexError);
+        const errorMessage = indexError instanceof Error ? indexError.message : "Unknown error";
+        
+        // Check for specific error messages
+        if (errorMessage.includes("DuplicateVideoCID")) {
+          toast.warning("This video has already been indexed.");
+          return;
+        } else if (errorMessage.includes("NodeNotActive") || errorMessage.includes("no active nodes")) {
+          toast.warning(
+            "No active nodes available for indexing. Your video has been saved and can be indexed later."
+          );
+          
+          // Update the video status to reassignable
+          addVideo(ipfsCid, {
+            fileName: file.name,
+            fileSize: file.size,
+            status: "reassignable",
+            requestTimestamp: Math.floor(Date.now() / 1000),
+            title: values.title,
+            description: values.description,
+          });
+        } else {
+          // Other errors
+          toast.error(`Indexing failed: ${errorMessage}`);
+          
+          // Update the video status to failed
+          addVideo(ipfsCid, {
+            fileName: file.name,
+            fileSize: file.size,
+            status: "failed",
+            requestTimestamp: Math.floor(Date.now() / 1000),
+            title: values.title,
+            description: values.description,
+          });
+        }
+      }
+
+      // Manually sync all videos to make sure we get the latest from the blockchain
+      setTimeout(() => syncAllVideos(), 3000);
+
       setOpen(false);
       form.reset();
       setFiles([]);
     } catch (error) {
-      console.error("Error indexing video:", error);
+      console.error("Error uploading video:", error);
       toast.error(
-        `Failed to index video: ${
+        `Failed to upload video: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
