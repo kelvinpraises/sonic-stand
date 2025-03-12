@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     }
 
     const message = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20240620",
+      model: "claude-3-7-sonnet-20250219",
       tool_choice: { type: "tool", name: "analyze_media_context" },
       tools: [
         {
@@ -198,11 +198,11 @@ export async function POST(req: NextRequest) {
                 },
               },
             },
-            required: ["summary", "scenes"],
+            required: ["cover", "summary", "scenes"],
           },
         },
       ],
-      max_tokens: 1024,
+      max_tokens: 4096,
       system:
         "You are an AI assistant tasked with creating concise, visually impaired-friendly descriptions for a series of video stills, considering both the visual content and associated audio context.",
       messages: [
@@ -228,6 +228,8 @@ export async function POST(req: NextRequest) {
                 ${capturedImages
                   .map((imageCID, index) => `Image ${index + 1}: ${imageCID}`)
                   .join("\n")}
+
+                Ensure to follow the input schema especially the scenes must be an array containing the keywords and description don't ever ever miss the schema
               `,
             },
           ],

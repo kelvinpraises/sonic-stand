@@ -134,13 +134,27 @@ async function loadSearchIndex(db: Kysely<DB>) {
 
 const initVideoSearchEngine = async (db: Kysely<DB>) => {
   try {
-    const searchIndex = await loadSearchIndex(db);
+    // Initialize as null - will be loaded on first search
+    let searchIndex: ReturnType<typeof createSearchIndex> | null = null;
+
+    // Lazy load function to initialize search index when needed
+    const ensureSearchIndex = async () => {
+      if (!searchIndex) {
+        searchIndex = await loadSearchIndex(db);
+      }
+      return searchIndex;
+    };
 
     return {
       indexVideo: async (metadata: VideoMetadata) => {
         try {
           const searchDoc = await indexVideo(db, metadata);
-          searchIndex.addDoc(searchDoc);
+
+          // Only load/update search index if it's already initialized
+          if (searchIndex) {
+            searchIndex.addDoc(searchDoc);
+          }
+
           return metadata.id;
         } catch (error) {
           console.error("Error in indexVideo:", error);
@@ -150,7 +164,10 @@ const initVideoSearchEngine = async (db: Kysely<DB>) => {
 
       search: async (query: string, limit = 5) => {
         try {
-          const results = searchIndex.search(query, {
+          // Ensure search index is loaded before searching
+          const index = await ensureSearchIndex();
+
+          const results = index.search(query, {
             fields: {
               summary: { boost: 2 },
               keywords: { boost: 1.5 },
@@ -167,7 +184,7 @@ const initVideoSearchEngine = async (db: Kysely<DB>) => {
             topResults.map(async (result) => {
               try {
                 // Get the document from search index
-                const doc = searchIndex.documentStore.getDoc(result.ref);
+                const doc = index.documentStore.getDoc(result.ref);
 
                 // Fetch the complete metadata from the database
                 const metadataRecord = await db
