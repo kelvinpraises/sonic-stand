@@ -1,4 +1,3 @@
-import { pinata } from "@/services/pinata";
 import { useCallback, useEffect, useState } from "react";
 
 interface SignedUrlResponse {
@@ -17,28 +16,17 @@ export const useGetVideoCID = () => {
       }
     };
   }, [blobURL]);
-
+  
   const getVideoCIDData = useCallback(
     async (videoCID: string): Promise<SignedUrlResponse | undefined> => {
       try {
-        const { data, contentType } = await pinata.gateways.public.get(
-          videoCID
-        );
+        // const url = `https://ipfs.io/ipfs/${videoCID}#x-ipfs-companion-no-redirect`;
+        const url = `https://lime-hidden-rodent-657.mypinata.cloud/ipfs/${videoCID}?pinataGatewayToken=8jiuhbdADzKIP0YFFfTybOIUUXvRMq0E7nHuzlm8qDo0Ri6euvHa7xiPVDvbODVf`
+        const response = await fetch(url);
+        const data = await response.blob();
+        const contentType = response.headers.get("content-type");
 
-        if (data instanceof Blob) {
-          const url = URL.createObjectURL(data);
-          setBlobURL(url);
-          return { url, data, contentType };
-        } else if (typeof data === "string" || data instanceof Object) {
-          const blob = new Blob([JSON.stringify(data)], {
-            type: "application/json",
-          });
-          const url = URL.createObjectURL(blob);
-          setBlobURL(url);
-          return { url, data, contentType };
-        } else {
-          return undefined;
-        }
+        return { url, data, contentType };
       } catch (error) {
         console.error("Error fetching video:", error);
         throw error;
