@@ -1,9 +1,39 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ImageBlockParam } from "@anthropic-ai/sdk/resources/index.mjs";
 import { Livepeer } from "@livepeer/ai";
+import ky from "ky";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { db as dbInstance } from "@/db";
 import { pinata } from "@/services/pinata";
+import initVideoSearchEngine from "@/utils/videarch";
+
+type PinataListFilesResponse = {
+  count: number;
+  rows: Array<{
+    id: string;
+    ipfs_pin_hash: string;
+    size: number;
+    user_id: string;
+    date_pinned: string;
+    date_unpinned: string | null;
+    metadata: {
+      name: string;
+      keyvalues: {
+        title: string;
+        uploadedBy: string;
+        description: string;
+      };
+    };
+    regions: Array<{
+      regionId: string;
+      currentReplicationCount: number;
+      desiredReplicationCount: number;
+    }>;
+    mime_type: string;
+    number_of_files: number;
+  }>;
+};
 
 const SUPPORTED_IMAGE_TYPES = [
   "image/jpeg",
@@ -18,8 +48,16 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
+    const videoCID = formData.getAll("videoCID");
     const capturedImages = formData.getAll("capturedImages");
     const extractedAudio = formData.get("extractedAudio") as Blob | null;
+
+    if (!videoCID || videoCID.length === 0) {
+      return NextResponse.json(
+        { error: "Invalid or empty videoCID array" },
+        { status: 400 }
+      );
+    }
 
     if (!extractedAudio || !(extractedAudio instanceof File)) {
       return NextResponse.json(
@@ -30,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     if (!Array.isArray(capturedImages) || capturedImages.length === 0) {
       return NextResponse.json(
-        { error: "Invalid or empty images array" },
+        { error: "Invalid or empty imageCID array" },
         { status: 400 }
       );
     }
@@ -41,58 +79,70 @@ export async function POST(req: NextRequest) {
 
     const anthropic = new Anthropic();
 
-    const result = await livepeer.generate.audioToText({
-      audio: extractedAudio,
-      modelId: "openai/whisper-large-v3",
-    });
-    const audioTranscription = result.textResponse?.text;
+    // Get video details
+    const response = await ky.get<PinataListFilesResponse>(
+      `https://api.pinata.cloud/data/pinList?hashContains=${videoCID}`,
+      {
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${process.env.PINATA_JWT}`,
+        },
+      }
+    );
+    const list = await response.json();
+
+    // Handle audio transcription with error fallback
+    let audioTranscription = "";
+    try {
+      const result = await livepeer.generate.audioToText({
+        audio: extractedAudio,
+        modelId: "openai/whisper-large-v3",
+      });
+      audioTranscription = result.textResponse?.text || "";
+    } catch (audioError) {
+      console.error("Audio transcription failed:", audioError);
+      // Continue with empty transcription rather than failing the whole process
+    }
 
     const imageContents: ImageBlockParam[] = (
       await Promise.all(
-        capturedImages.map(async (videoCID) => {
-          if (typeof videoCID !== "string") {
-            console.log(`Skipping non-string image: ${videoCID}`);
+        capturedImages.map(async (imageCID) => {
+          if (typeof imageCID !== "string") {
+            console.log(`Skipping non-string image: ${imageCID}`);
             return null;
           }
 
-          const file = await pinata.gateways.public.get(videoCID);
+          try {
+            const url = `https://lime-hidden-rodent-657.mypinata.cloud/ipfs/${imageCID}?pinataGatewayToken=8jiuhbdADzKIP0YFFfTybOIUUXvRMq0E7nHuzlm8qDo0Ri6euvHa7xiPVDvbODVf`;
+            const response = await ky.get(url);
+            const data = await response.blob();
+            const contentType = response.headers.get("content-type");
 
-          if (
-            !file.data ||
-            !file.contentType ||
-            !SUPPORTED_IMAGE_TYPES.includes(
-              file.contentType as SupportedImageType
-            )
-          ) {
-            console.log(
-              `Skipping unsupported content type for image: ${videoCID}`
-            );
+            if (
+              !contentType ||
+              !SUPPORTED_IMAGE_TYPES.includes(contentType as SupportedImageType)
+            ) {
+              console.log(
+                `Skipping unsupported content type for image: ${imageCID}`
+              );
+              return null;
+            }
+
+            const arrayBuffer = await data.arrayBuffer();
+            const base64Data = Buffer.from(arrayBuffer).toString("base64");
+
+            return {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: contentType as SupportedImageType,
+                data: base64Data,
+              },
+            };
+          } catch (error) {
+            console.error("Error fetching image:", error);
             return null;
           }
-
-          let base64Data: string;
-
-          if (file.data instanceof Blob) {
-            const arrayBuffer = await file.data.arrayBuffer();
-            base64Data = Buffer.from(arrayBuffer).toString("base64");
-          } else if (typeof file.data === "string") {
-            base64Data = Buffer.from(file.data).toString("base64");
-          } else if (file.data instanceof Object) {
-            console.log(`Unexpected Object data type for image: ${videoCID}`);
-            return null;
-          } else {
-            console.log(`Unsupported data type for image: ${videoCID}`);
-            return null;
-          }
-
-          return {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: file.contentType as SupportedImageType,
-              data: base64Data,
-            },
-          };
         })
       )
     ).filter((content): content is ImageBlockParam => content !== null);
@@ -106,102 +156,55 @@ export async function POST(req: NextRequest) {
 
     const message = await anthropic.messages.create({
       model: "claude-3-5-sonnet-20240620",
-      tool_choice: { type: "tool", name: "create_video_index" },
+      tool_choice: { type: "tool", name: "analyze_media_context" },
       tools: [
         {
-          name: "create_video_index",
+          name: "analyze_media_context",
           description:
-            "Create a searchable index for video content based on images and audio",
+            "Analyze images and audio from the current context and provide structured analysis",
           input_schema: {
             type: "object",
             properties: {
-              metadata: {
-                type: "object",
-                properties: {
-                  title: {
-                    type: "string",
-                    description: "Generated title for the video content",
-                  },
-                  description: {
-                    type: "string",
-                    description: "Overall summary of the video content",
-                  },
-                  duration: {
-                    type: "number",
-                    description:
-                      "Estimated duration in seconds (if discernible)",
-                  },
-                  keywords: {
-                    type: "array",
-                    items: {
-                      type: "string",
-                    },
-                    description:
-                      "Key terms or concepts identified in the video",
-                  },
-                },
-                required: ["title", "description", "keywords"],
+              cover: {
+                type: "string",
+                description:
+                  "Choose a imageCID that that best represents a cover image among the provided images to imageCID mapping",
               },
-              timestamps: {
+              summary: {
+                type: "string",
+                description:
+                  "Overall summary of the media content and their relationship",
+              },
+              scenes: {
                 type: "array",
                 items: {
                   type: "object",
                   properties: {
-                    time: {
-                      type: "number",
-                      description: "Estimated timestamp in seconds",
-                    },
-                    description: {
-                      type: "string",
-                      description: "Description of the scene at this timestamp",
-                    },
                     keywords: {
                       type: "array",
                       items: {
                         type: "string",
                       },
-                      description: "Keywords relevant to this timestamp",
+                      description:
+                        "Key terms or concepts identified in the image",
                     },
-                  },
-                  required: ["description", "keywords"],
-                },
-              },
-              topics: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: {
+                    description: {
                       type: "string",
-                      description: "Topic name",
-                    },
-                    relevance: {
-                      type: "number",
-                      description: "Relevance score 0-1",
-                    },
-                    timestamps: {
-                      type: "array",
-                      items: {
-                        type: "number",
-                      },
-                      description: "Timestamps where this topic appears",
+                      description:
+                        "Detailed description of the image incorporating relevant audio context",
                     },
                   },
-                  required: ["name", "relevance"],
+                  required: ["keywords", "description"],
                 },
-              },
-              transcript: {
-                type: "string",
-                description: "Cleaned and formatted transcript of the audio",
               },
             },
-            required: ["metadata", "timestamps", "transcript"],
+            required: ["summary", "scenes"],
           },
         },
       ],
-      max_tokens: 4096,
+      max_tokens: 1024,
       system:
-        "You are an advanced AI system that creates detailed, searchable indexes for video content based on video frames and audio transcripts.",
+        "You are an AI assistant tasked with creating concise, visually impaired-friendly descriptions for a series of video stills, considering both the visual content and associated audio context.",
       messages: [
         {
           role: "user",
@@ -211,15 +214,20 @@ export async function POST(req: NextRequest) {
               type: "text",
               text: `Audio transcription: "${audioTranscription}"
 
-                Analyze these video frames and audio transcript to create a comprehensive, searchable index for this video. 
-                
-                Create a rich video index that includes:
-                - Meaningful title and description
-                - Key topics and concepts
-                - Timestamps with descriptions
-                - Organized transcript
-                
-                Focus on creating an index that would be useful for semantic search and content discovery.
+                User provided title: ${list.rows[0].metadata.keyvalues.title}
+                User provided description: ${
+                  list.rows[0].metadata.keyvalues.description
+                }
+
+                Analyze each image sequentially, considering both the visual content and the provided audio transcription. Create a brief, one-sentence description for each image that summarizes the key visual aspects and incorporates relevant audio context.
+
+                Provide your output as a JSON array of strings, with each string being a concise description of one image. Describe directly without using phrases like 'this image shows'. Ensure your descriptions are clear, specific, and accessible to visually impaired individuals, integrating audio context where relevant.
+
+                Note the instructions when returning the cover image each image above sequentially maps to the imageCIDs below.
+
+                ${capturedImages
+                  .map((imageCID, index) => `Image ${index + 1}: ${imageCID}`)
+                  .join("\n")}
               `,
             },
           ],
@@ -227,11 +235,33 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    // if (message.tool_calls && message.tool_calls.length > 0) {
-    if (message.content[0].type === "text") {
-      //   const indexData = JSON.parse(message.tool_calls[0].input);
-      const indexData = JSON.parse(message.content[0].text);
-      const upload = await pinata.upload.public.json(indexData);
+    console.log(message);
+
+    const toolUseContent = message.content.find(
+      (item) => item.type === "tool_use"
+    );
+
+    if (toolUseContent && "input" in toolUseContent) {
+      const data = {
+        id: videoCID[0],
+        title: list.rows[0].metadata.keyvalues.title || "",
+        uploadedBy: list.rows[0].metadata.keyvalues.uploadedBy || "",
+        description: list.rows[0].metadata.keyvalues.description || "",
+        capturedImages,
+        ...(typeof toolUseContent.input === "object"
+          ? JSON.parse(JSON.stringify(toolUseContent.input))
+          : {}),
+      };
+
+      console.log(data);
+
+      const db = dbInstance();
+      const searchEngine = await initVideoSearchEngine(db);
+      await searchEngine.indexVideo(data);
+
+      const upload = await pinata.upload.public.json(
+        JSON.parse(JSON.stringify(data))
+      );
       return NextResponse.json({ indexCID: upload.cid }, { status: 200 });
     } else {
       return NextResponse.json(
