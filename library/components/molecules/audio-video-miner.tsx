@@ -1,4 +1,4 @@
-import { JSX, useEffect, useState } from "react";
+import { JSX, useEffect, useState, useRef } from "react";
 
 import Canvas from "@/components/molecules/canvas";
 import useCaptureStills from "@/hooks/use-capture-stills";
@@ -16,6 +16,7 @@ const AudioVideoMiner = ({
   const [isVideoVisible, setIsVideoVisible] = useState(true);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const hasCompletedRef = useRef(false);
 
   const { getVideoCIDData } = useGetVideoCID();
   const {
@@ -32,12 +33,12 @@ const AudioVideoMiner = ({
     lastEvent,
   } = useCaptureStills();
 
-  // Fix audio issue and use audioBlob from useAudioExtractor()
   useEffect(() => {
-    if (lastEvent === "all_complete" && videoBlob) {
+    if (lastEvent === "all_complete" && videoBlob && !hasCompletedRef.current) {
+      hasCompletedRef.current = true;
       onComplete(capturedImages, videoBlob);
     }
-  }, [lastEvent, processStatus, capturedImages, onComplete, videoBlob]);
+  }, [lastEvent, processStatus, capturedImages, videoBlob]);
 
   useEffect(() => {
     const fetchData = async () => {
