@@ -1,6 +1,6 @@
 const data = {
   name: "Vise Protocol",
-  address: "0x52b6622fa8057b2180E0E87B0da9E3a30093751d",
+  address: "0x22753E4264FDDc6181dc7cce468904A80a363E44",
   abi: [
     {
       type: "constructor",
