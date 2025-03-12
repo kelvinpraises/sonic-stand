@@ -31,15 +31,11 @@ export default function Explore() {
       </motion.div>
 
       <div className="w-full max-w-6xl mx-auto mt-8">
-        <Tabs defaultValue="my-videos" className="w-full">
+        <Tabs defaultValue="explore" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="my-videos">My Indexed Videos</TabsTrigger>
             <TabsTrigger value="explore">Explore</TabsTrigger>
+            <TabsTrigger value="my-videos">My Indexed Videos</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="my-videos" className="mt-4">
-            <UserIndexedVideos />
-          </TabsContent>
 
           <TabsContent value="explore" className="mt-4">
             {isLoading ? (
@@ -70,6 +66,10 @@ export default function Explore() {
             ) : (
               <IndexExplorerCards metadata={metadata} defaultLayout="grid" />
             )}
+          </TabsContent>
+
+          <TabsContent value="my-videos" className="mt-4">
+            <UserIndexedVideos />
           </TabsContent>
         </Tabs>
       </div>
