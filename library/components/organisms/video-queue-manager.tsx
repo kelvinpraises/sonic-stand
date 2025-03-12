@@ -1,13 +1,14 @@
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 
 import { Card, CardContent, CardHeader } from "@/components/atoms/card";
 import AudioVideoMiner from "@/components/molecules/audio-video-miner";
 import usePollingEffect from "@/hooks/use-polling-effect";
 import { useVISENetwork } from "@/hooks/use-vise-network";
+import useStore from "@/store";
 
-const POLLING_INTERVAL = 20000; // 20 seconds
+const POLLING_INTERVAL = 5000; // 20 seconds
 
 const VideoQueueManager = () => {
   const [currentVideoTask, setCurrentVideoTask] = useState<{
@@ -17,6 +18,7 @@ const VideoQueueManager = () => {
 
   const { completeIndexingVideo, getVideoStatus, getNodeStatus } =
     useVISENetwork();
+  const { updateStats } = useStore();
 
   // Check if this node has been assigned a video to index
   const checkNodeTask = useCallback(async () => {
@@ -76,20 +78,28 @@ const VideoQueueManager = () => {
     if (currentVideoTask?.videoCID) {
       try {
         const formData = new FormData();
+        formData.append("videoCID", currentVideoTask.videoCID);
         capturedImages.forEach((image) =>
           formData.append("capturedImages", image)
         );
         formData.append("extractedAudio", extractedAudio, "audio.wav");
 
         // Upload the extracted data to your indexing service
-        const response = await fetch("/api/vision", {
+        const response = await fetch("/api/indexing", {
           method: "POST",
           body: formData,
         });
         const result = await response.json();
 
+        console.log(result);
+
         // Complete the indexing process with the indexCID (result from the indexing service)
         await completeIndexingVideo(currentVideoTask.videoCID, result.indexCID);
+
+        // Update analytics:
+        // - Completed Captions increases by 1
+        // - Scenes Processed increases by the number of captured images
+        updateStats(capturedImages.length);
 
         toast.success("Video Indexing Successful");
         setCurrentVideoTask(null);
