@@ -1,7 +1,6 @@
 "use client";
 
 import { useModal } from "connectkit";
-import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback } from "react";
 import {
@@ -11,7 +10,6 @@ import {
   useEnsName,
 } from "wagmi";
 
-import { Button } from "@/components/atoms/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
